@@ -3,7 +3,9 @@ import time
 import subprocess
 import json
 import logging
+import unicodedata
 from pytube import Playlist
+from yt_dlp import YoutubeDL
 
 # Configuration
 PLAYLIST_URL = "https://music.youtube.com/playlist?list=PLjBNkCPPfIQ7ZZ9tejPFiaNUaxWTMgBYC"
@@ -42,9 +44,11 @@ def fetch_playlist_videos(playlist_url):
     return playlist.video_urls
 
 def download_audio(video_url, output_dir):
-    cmd = ["yt-dlp", "-f", "bestaudio", "-o", f"{output_dir}/%(title)s.%(ext)s", video_url]
     logging.info(f"Downloading audio for video: {video_url}")
-    subprocess.run(cmd, check=True)
+    with YoutubeDL({'outtmpl': f'{output_dir}/%(title)s.%(ext)s'}) as ydl:
+        info_dict = ydl.extract_info(video_url, download=True)
+        file_path = ydl.prepare_filename(info_dict)
+    return file_path
 
 def push_file_to_phone(file_path, phone_path):
     cmd = ["adb", "push", file_path, phone_path]
@@ -62,16 +66,8 @@ def main():
             for video in videos:
                 if video not in processed_urls:
                     logging.info(f"New video found: {video}")
-                    # Download the audio of the video
-                    download_audio(video, DOWNLOAD_DIR)
-                    
-                    # Push the downloaded file to the phone
-                    for file in os.listdir(DOWNLOAD_DIR):
-                        file_path = os.path.join(DOWNLOAD_DIR, file)
-                        if os.path.isfile(file_path):
-                            push_file_to_phone(file_path, PHONE_PATH)
-                    
-                    # Mark the video as processed and save state
+                    file_path = download_audio(video, DOWNLOAD_DIR)
+                    push_file_to_phone(file_path, PHONE_PATH)
                     processed_urls.add(video)
                     save_processed_urls()
 
